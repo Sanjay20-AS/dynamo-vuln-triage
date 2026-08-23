@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vuln Triage — NEXORA 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0d10;
+    --bg-elev: #11161b;
+    --bg-elev-2: #161c23;
+    --border: #232b32;
+    --border-bright: #34424c;
+    --text: #e7edf1;
+    --text-dim: #8b98a3;
+    --text-faint: #57636d;
+    --sig-kev: #ff5a4e;
+    --sig-epss: #ffb545;
+    --sig-cvss: #4ec9ff;
+    --sig-crit: #b98cff;
+    --ok: #35d68a;
+    --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-attachment: fixed;
+    background-color: var(--bg);
+  }
+  body::before{
+    content:"";
+    position: fixed; inset:0;
+    background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(78,201,255,0.07), transparent 70%);
+    pointer-events:none;
+  }
+  header{
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+  .brand{display:flex; align-items:baseline; gap:12px;}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok); display:inline-block;}
+  h1{font-size:15px; letter-spacing:0.06em; text-transform:uppercase; font-weight:600; color:var(--text);}
+  .subtitle{font-family:var(--mono); font-size:11px; color:var(--text-faint); letter-spacing:0.02em;}
+  .live-clock{font-family:var(--mono); font-size:11px; color:var(--text-faint);}
+
+  main{max-width:1080px; margin:0 auto; padding: 28px 24px 80px;}
+
+  .org-strip{display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;}
+  .org-tab{
+    background: rgba(17, 22, 27, 0.6); backdrop-filter: blur(8px); border:1px solid rgba(255,255,255,0.05); color:var(--text-dim);
+    padding:10px 16px; border-radius:8px; font-size:13px; cursor:pointer; font-family:var(--sans);
+    transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .org-tab:hover{border-color:var(--border-bright); color:var(--text); transform: translateY(-1px); background: rgba(22, 28, 35, 0.8);}
+  .org-tab.active{background:rgba(22, 28, 35, 0.9); border-color:var(--sig-cvss); color:var(--text); box-shadow:0 0 0 1px var(--sig-cvss) inset, 0 4px 12px rgba(0,0,0,0.2);}
+  .org-tab .tab-sector{font-family:var(--mono); font-size:10px; color:var(--text-faint); display:block; margin-top:2px; letter-spacing:.02em;}
+
+  .weights-bar{
+    display:flex; gap:18px; align-items:center; margin-bottom:24px;
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    background:rgba(17, 22, 27, 0.5); backdrop-filter: blur(8px); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:12px 16px;
+  }
+  .weights-bar .w-item{display:flex; align-items:center; gap:6px;}
+  .swatch{width:8px;height:8px;border-radius:2px; display:inline-block;}
+
+  .neg-test{
+    border:1px solid var(--sig-kev);
+    background: linear-gradient(180deg, rgba(255,90,78,0.1), rgba(255,90,78,0.03));
+    backdrop-filter: blur(8px);
+    border-radius:10px; padding:18px 20px; margin-bottom:28px;
+    font-family:var(--mono);
+    box-shadow: 0 4px 16px rgba(255,90,78,0.08);
+  }
+  .neg-test .nt-label{color:var(--sig-kev); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:8px;}
+  .neg-test .nt-label::before{content:"⊘"; font-size:14px;}
+  .neg-test .nt-body{font-size:12.5px; color:var(--text-dim); line-height:1.7;}
+  .neg-test .nt-body strong{color:var(--text);}
+  .neg-test .nt-score{color:var(--text-faint); font-size:11px; margin-top:6px;}
+
+  .section-label{
+    font-family:var(--mono); font-size:11px; color:var(--text-faint); letter-spacing:.1em; text-transform:uppercase;
+    margin: 0 0 12px 2px; display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after{content:""; flex:1; height:1px; background:var(--border);}
+
+  .cards{display:flex; flex-direction:column; gap:14px;}
+  .card{
+    background: rgba(17, 22, 27, 0.65); backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,0.06); border-radius:10px;
+    padding:16px 18px; cursor:pointer; transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .card:hover{border-color:var(--border-bright); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); background: rgba(22, 28, 35, 0.75);}
+  .card.expanded{border-color:var(--sig-cvss); box-shadow: 0 0 0 1px var(--sig-cvss) inset, 0 8px 24px rgba(0,0,0,0.3);}
+  .card-top{display:flex; align-items:center; gap:14px;}
+  .rank{font-family:var(--mono); font-size:11px; color:var(--text-faint); width:20px;}
+  .priority-badge{
+    font-family:var(--mono); font-size:10px; letter-spacing:.06em; font-weight:700;
+    padding:3px 8px; border-radius:4px; text-transform:uppercase; flex-shrink:0;
+  }
+  .priority-badge.urgent{background:rgba(255,90,78,0.15); color:var(--sig-kev); border:1px solid rgba(255,90,78,0.35);}
+  .priority-badge.default{background:rgba(78,201,255,0.12); color:var(--sig-cvss); border:1px solid rgba(78,201,255,0.3);}
+  .card-title{flex:1; min-width:0;}
+  .card-title .t-main{font-size:14px; color:var(--text); font-weight:500;}
+  .card-title .t-sub{font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-top:2px;}
+  .score-display{font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600; text-align:right;}
+  .score-display .s-label{font-size:9px; color:var(--text-faint); font-weight:400; display:block;}
+  .crit-flag{font-size:9px; font-family:var(--mono); color:var(--sig-crit); border:1px solid rgba(185,140,255,.35); background:rgba(185,140,255,.1); padding:2px 6px; border-radius:4px; margin-left:6px;}
+
+  .card-detail{
+    max-height:0; overflow:hidden; transition: max-height .35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .card.expanded .card-detail{max-height:400px;}
+  .card-detail-inner{padding-top:14px; margin-top:14px; border-top:1px solid var(--border);}
+  .factor-row{display:flex; align-items:center; gap:10px; margin-bottom:7px; font-family:var(--mono); font-size:11px;}
+  .factor-label{width:150px; color:var(--text-dim); flex-shrink:0;}
+  .factor-bar-track{flex:1; height:6px; background:var(--bg); border-radius:3px; overflow:hidden;}
+  .factor-bar-fill{height:100%; border-radius:3px;}
+  .factor-val{width:60px; text-align:right; color:var(--text-faint); flex-shrink:0;}
+  .next-step{font-size:12px; color:var(--text-dim); margin-top:12px; line-height:1.6;}
+  .next-step strong{color:var(--text);}
+  .source-line{font-family:var(--mono); font-size:10px; color:var(--text-faint); margin-top:8px; letter-spacing:.02em;}
+
+  .loading, .empty{color:var(--text-faint); font-family:var(--mono); font-size:12px; padding:40px 0; text-align:center;}
+  .error{color:var(--sig-kev); font-family:var(--mono); font-size:12px; padding:20px; background:var(--bg-elev); border:1px solid var(--sig-kev); border-radius:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <h1>Personalised Vulnerability Triage</h1>
+  </div>
+  <div class="subtitle" id="api-status">connecting to localhost:8000 …</div>
+</header>
+
+<main>
+  <div class="section-label">Organisation</div>
+  <div class="org-strip" id="org-strip"></div>
+  <div class="weights-bar" id="weights-bar" style="display:none;"></div>
+
+  <div id="neg-test-slot"></div>
+
+  <div class="section-label">Top 5 — Priority Order</div>
+  <div class="cards" id="cards">
+    <div class="loading">select an organisation to load triage results</div>
+  </div>
+</main>
+
+<script>
+const API_BASE = "http://localhost:8000";
+let orgs = [];
+let activeOrgId = null;
+
+const orgStrip = document.getElementById('org-strip');
+const weightsBar = document.getElementById('weights-bar');
+const cardsEl = document.getElementById('cards');
+const negSlot = document.getElementById('neg-test-slot');
+const apiStatus = document.getElementById('api-status');
+
+function factorColor(label){
+  const l = label.toLowerCase();
+  if (l.includes('kev')) return 'var(--sig-kev)';
+  if (l.includes('epss')) return 'var(--sig-epss)';
+  if (l.includes('cvss')) return 'var(--sig-cvss)';
+  if (l.includes('critical')) return 'var(--sig-crit)';
+  return 'var(--text-dim)';
+}
+
+async function init(){
+  try{
+    const res = await fetch(`${API_BASE}/organizations`);
+    if(!res.ok) throw new Error('bad response');
+    orgs = await res.json();
+    apiStatus.textContent = `${orgs.length} profiles loaded · live`;
+    renderOrgStrip();
+    if(orgs.length) selectOrg(orgs[0].org_id);
+  }catch(e){
+    apiStatus.textContent = 'API unreachable';
+    cardsEl.innerHTML = `<div class="error">Could not reach ${API_BASE}. Start the backend with:<br><br>uvicorn api:app --reload --port 8000</div>`;
+  }
+}
+
+function renderOrgStrip(){
+  orgStrip.innerHTML = '';
+  orgs.forEach(o=>{
+    const tab = document.createElement('div');
+    tab.className = 'org-tab' + (o.org_id === activeOrgId ? ' active' : '');
+    tab.innerHTML = `${o.name}<span class="tab-sector">${o.sector || ''}</span>`;
+    tab.onclick = () => selectOrg(o.org_id);
+    orgStrip.appendChild(tab);
+  });
+}
+
+function renderWeights(org){
+  weightsBar.style.display = 'flex';
+  weightsBar.innerHTML = `
+    <div class="w-item"><span class="swatch" style="background:var(--sig-cvss)"></span>CVSS ${org.weights.cvss}</div>
+    <div class="w-item"><span class="swatch" style="background:var(--sig-kev)"></span>KEV ${org.weights.cisa_kev}</div>
+    <div class="w-item"><span class="swatch" style="background:var(--sig-epss)"></span>EPSS ${org.weights.first_epss}</div>
+    <div style="flex:1"></div>
+    <div style="color:var(--text-faint)">${org.risk_appetite || ''}</div>
+  `;
+}
+
+async function selectOrg(orgId){
+  activeOrgId = orgId;
+  renderOrgStrip();
+  const org = orgs.find(o=>o.org_id===orgId);
+  if(org) renderWeights(org);
+
+  cardsEl.innerHTML = '<div class="loading">scoring 540 CVEs against profile …</div>';
+  negSlot.innerHTML = '';
+
+  const [triageRes, negRes] = await Promise.allSettled([
+    fetch(`${API_BASE}/triage/${orgId}`).then(r=>r.json()),
+    fetch(`${API_BASE}/triage/${orgId}/negative-test`).then(r=>r.json())
+  ]);
+
+  if(negRes.status === 'fulfilled' && !negRes.value.detail){
+    renderNegTest(negRes.value);
+  }
+
+  if(triageRes.status === 'fulfilled'){
+    renderCards(triageRes.value.results || []);
+  }else{
+    cardsEl.innerHTML = '<div class="error">Failed to load triage results.</div>';
+  }
+}
+
+function renderNegTest(nt){
+  negSlot.innerHTML = `
+    <div class="neg-test">
+      <div class="nt-label">Negative test — proof this isn't just severity-sorting</div>
+      <div class="nt-body">
+        <strong>${nt.cve_id}</strong> (${nt.product}) carries CVSS <strong>${nt.cvss}</strong> —
+        yet it did <strong>not</strong> make the top 5 for this org.
+        ${nt.kev ? '' : 'Not in CISA KEV. '}${nt.is_critical_product ? '' : 'Not a critical asset for this profile. '}
+        EPSS ${(nt.epss*100).toFixed(2)}%.
+      </div>
+      <div class="nt-score">computed score: ${nt.score_display}</div>
+    </div>
+  `;
+}
+
+function renderCards(results){
+  if(!results.length){
+    cardsEl.innerHTML = '<div class="empty">no results returned for this profile</div>';
+    return;
+  }
+  cardsEl.innerHTML = '';
+  results.forEach((card, i)=>{
+    const el = document.createElement('div');
+    el.className = 'card';
+    const isUrgent = (card.priority || '').toLowerCase().includes('urgent') || (card.priority||'').toLowerCase().includes('critical');
+    const maxFactor = Math.max(...card.factors.map(f=>Math.abs(parseFloat(f.value))||0), 0.01);
+
+    el.innerHTML = `
+      <div class="card-top">
+        <div class="rank">#${i+1}</div>
+        <div class="priority-badge ${isUrgent ? 'urgent':'default'}">${card.priority || 'REVIEW'}</div>
+        <div class="card-title">
+          <div class="t-main">${card.title || card.cve_id}${card.is_critical_product ? '<span class="crit-flag">critical asset</span>':''}</div>
+          <div class="t-sub">${card.cve_id} · ${card.product}</div>
+        </div>
+        <div class="score-display">${card.score_display}<span class="s-label">score</span></div>
+      </div>
+      <div class="card-detail">
+        <div class="card-detail-inner">
+          ${card.factors.map(f=>{
+            const v = parseFloat(f.value) || 0;
+            const pct = Math.min(100, Math.abs(v)/maxFactor*100);
+            const col = factorColor(f.label);
+            return `<div class="factor-row">
+              <div class="factor-label">${f.label}</div>
+              <div class="factor-bar-track"><div class="factor-bar-fill" style="width:${pct}%; background: linear-gradient(90deg, ${col} 0%, transparent 100%); background-color: ${col}; opacity: 0.9;"></div></div>
+              <div class="factor-val">${f.value}</div>
+            </div>`;
+          }).join('')}
+          <div class="next-step"><strong>Next step:</strong> ${card.next_step || '—'}</div>
+          <div class="source-line">source: ${card.source} · confidence: ${card.confidence || 'n/a'}</div>
+        </div>
+      </div>
+    `;
+    el.onclick = () => el.classList.toggle('expanded');
+    cardsEl.appendChild(el);
+  });
+}
+
+init();
+</script>
+</body>
+</html>

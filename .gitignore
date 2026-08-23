@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+node_modules/
+.env
+.DS_Store
+main_out_utf8.txt
+gold_out_utf8.txt
+main_out.txt
+gold_out.txt
+check_cves.py

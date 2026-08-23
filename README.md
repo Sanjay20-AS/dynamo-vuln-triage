@@ -65,6 +65,9 @@ every org, just weighted differently. This matters because the required
 negative test (below) depends on non-critical, low-signal items still
 being visible in the ranking, just pushed down.
 
+![Expanded vulnerability card showing every scoring factor](screenshots/vulnerability-card-detail.png)
+*Every score breaks into visible, weighted factors — nothing is a black box.*
+
 ## Scoring formula (fully visible in every result)
 
 ```
@@ -96,6 +99,9 @@ main.py         -> runs the full pipeline, prints top 5 per org
   very high EPSS (95%) outscores a critical item with slightly lower EPSS.
   This is a legitimate consequence of a transparent, org-specific formula —
   not a scoring bug.
+
+![Full dashboard view with organisation tabs, weight formula, and negative test panel](screenshots/dashboard-overview.png)
+*Live dashboard showing organisation-specific weights and the negative test proof.*
 
 ## Required negative test
 

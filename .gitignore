@@ -10,3 +10,5 @@ gold_out_utf8.txt
 main_out.txt
 gold_out.txt
 check_cves.py
+data/profiles_test.json
+scratch_test.py
